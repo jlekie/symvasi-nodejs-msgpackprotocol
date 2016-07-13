@@ -2,7 +2,31 @@ import MsgPack from 'msgpack-lite';
 import { ReadableStreamBuffer, WritableStreamBuffer } from 'stream-buffers';
 import Deasync from 'deasync';
 
-import { ErrorHeader } from 'symvasi-runtime';
+// import { ErrorHeader } from 'symvasi-runtime';
+import { RequestHeader, ResponseHeader, ArgumentHeader, ModelHeader, PropertyHeader, ListHeader, IndefinateHeader, ErrorHeader } from './headers';
+
+export var HeaderCodes = {
+    reqStart: 0,
+    reqEnd: 1,
+
+    resStart: 2,
+    resEnd: 3,
+
+    reqArgStart: 4,
+    reqArgEnd: 5,
+
+    modelStart: 6,
+    modelEnd: 7,
+
+    propStart: 8,
+    propEnd: 9,
+
+    listStart: 10,
+    listEnd: 11,
+
+    indefinateStart: 12,
+    indefinateEnd: 13
+};
 
 export class MsgPackProtocol {
     constructor(transport) {
@@ -13,9 +37,8 @@ export class MsgPackProtocol {
         let data;
         Deasync.loopWhile(() => {
             data = this._data.shift();
-            return !data;
+            return data === undefined;
         });
-        
         return data;
     }
     
@@ -67,34 +90,34 @@ export class MsgPackProtocol {
         this.decoderStream = null;
     }
     
-    writeRequestStart(methodName) {
+    writeRequestStart(methodName, argumentCount) {
         this.beginWrite();
-        
-        this.writeString('req');
-        this.writeObject({ method: methodName });
+
+        this.writeHeaderCode(HeaderCodes.reqStart);
+        this.writeHeader(new RequestHeader({ methodName: methodName, argumentCount: argumentCount }));
     }
     writeRequestEnd() {
-        this.writeString('/req');
+        this.writeHeaderCode(HeaderCodes.reqEnd);
         
         this.endWrite();
     }
     
     writeRequestArgumentStart(name) {
-        this.writeString('arg');
-        this.writeObject({ name: name });
+        this.writeHeaderCode(HeaderCodes.reqArgStart);
+        this.writeHeader(new ArgumentHeader({ name: name }));
     }
     writeRequestArgumentEnd() {
-        this.writeString('/arg');
+        this.writeHeaderCode(HeaderCodes.reqArgEnd);
     }
     
     writeResponseStart(success) {
         this.beginWrite();
         
-        this.writeString('res');
+        this.writeHeaderCode(HeaderCodes.resStart);
         this.writeObject({ isValid: success });
     }
     writeResponseEnd() {
-        this.writeString('/res');
+        this.writeHeaderCode(HeaderCodes.resEnd);
         
         this.endWrite();
     }
@@ -102,79 +125,71 @@ export class MsgPackProtocol {
     readRequestStart() {
         this.beginRead();
         
-        let data = this.readString();
-        
-        if (data !== 'req') {
-            throw new Error('Invalid message');
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.reqStart) {
+            throw new Error('Invalid message (reqStart)');
         }
         
-        return this.readObject();
+        return this.readHeader(RequestHeader);
     }
     async readRequestStartAsync() {
         await this.beginReadAsync();
         
-        let data = this.readString();
-        
-        if (data !== 'req') {
-            throw new Error('Invalid message');
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.reqStart) {
+            throw new Error('Invalid message (reqStart)');
         }
         
-        return this.readObject();
+        return this.readHeader(RequestHeader);
     }
     readRequestEnd() {
-        let data = this.readString();
-        
-        if (data !== '/req') {
-            throw new Error('Invalid message');
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.reqEnd) {
+            throw new Error('Invalid message (reqEnd)');
         }
         
         this.endRead();
     }
     
     readRequestArgumentStart() {
-        let data = this.readString();
-        
-        if (data !== 'arg') {
-            throw new Error('Invalid message');
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.reqArgStart) {
+            throw new Error('Invalid message (reqArgStart)');
         }
         
-        return this.readObject();
+        return this.readHeader(RequestHeader);
     }
     readRequestArgumentEnd() {
-        let data = this.readString();
-        
-        if (data !== '/arg') {
-            throw new Error('Invalid message');
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.reqArgEnd) {
+            throw new Error('Invalid message (reqArgEnd)');
         }
     }
     
     readResponseStart() {
         this.beginRead();
         
-        let data = this.readString();
-        
-        if (data !== 'res') {
-            throw new Error('Invalid message');
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.resStart) {
+            throw new Error('Invalid message (resStart)');
         }
         
-        return this.readObject();
+        return this.readHeader(ResponseHeader);
     }
     async readResponseStartAsync() {
         await this.beginReadAsync();
         
-        let data = this.readString();
-        
-        if (data !== 'res') {
-            throw new Error('Invalid message');
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.resStart) {
+            throw new Error('Invalid message (resStart)');
         }
         
-        return this.readObject();
+        return this.readHeader(ResponseHeader);
     }
     readResponseEnd() {
-        let data = this.readString();
-        
-        if (data !== '/res') {
-            throw new Error('Invalid message');
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.resEnd) {
+            throw new Error('Invalid message (resEnd)');
         }
         
         this.endRead();
@@ -187,36 +202,62 @@ export class MsgPackProtocol {
     }
     
     readModelStart() {
-        let data = this.readString();
-        
-        if (data !== 'model') {
-            throw new Error('Invalid message');
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.modelStart) {
+            throw new Error('Invalid message (modelStart)');
         }
         
-        return this.readObject();
+        return this.readHeader(ModelHeader);
     }
     readModelEnd() {
-        let data = this.readString();
-        
-        if (data !== '/model') {
-            throw new Error('Invalid message');
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.modelEnd) {
+            throw new Error('Invalid message (modelEnd)');
         }
     }
     
     readModelPropertyStart() {
-        let data = this.readString();
-        
-        if (data !== 'prop') {
-            throw new Error('Invalid message');
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.propStart) {
+            throw new Error('Invalid message (propStart)');
         }
         
-        return this.readObject();
+        return this.readHeader(PropertyHeader);
     }
     readModelPropertyEnd() {
-        let data = this.readString();
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.propEnd) {
+            throw new Error('Invalid message (propEnd)');
+        }
+    }
+
+    readListStart() {
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.listStart) {
+            throw new Error('Invalid message (listStart)');
+        }
         
-        if (data !== '/prop') {
-            throw new Error('Invalid message');
+        return this.readHeader(ListHeader);
+    }
+    readListEnd() {
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.listEnd) {
+            throw new Error('Invalid message (listEnd)');
+        }
+    }
+
+    readIndefinateStart() {
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.indefinateStart) {
+            throw new Error('Invalid message (indefinateStart)');
+        }
+        
+        return this.readHeader(IndefinateHeader);
+    }
+    readIndefinateEnd() {
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.indefinateEnd) {
+            throw new Error('Invalid message (indefinateEnd)');
         }
     }
 
@@ -225,19 +266,35 @@ export class MsgPackProtocol {
     }
     
     writeModelStart(type, propertyCount) {
-        this.writeString('model');
-        this.writeObject({ propertyCount: propertyCount });
+        this.writeHeaderCode(HeaderCodes.modelStart);
+        this.writeHeader(new ModelHeader({ propertyCount: propertyCount }));
     }
     writeModelEnd() {
-        this.writeString('/model');
+        this.writeHeaderCode(HeaderCodes.modelEnd);
     }
     
     writeModelPropertyStart(name, type, isNull) {
-        this.writeString('prop');
-        this.writeObject({ name: name, isNull: isNull });
+        this.writeHeaderCode(HeaderCodes.propStart);
+        this.writeHeader(new PropertyHeader({ name: name, isNull: isNull }));
     }
     writeModelPropertyEnd() {
-        this.writeString('/prop');
+        this.writeHeaderCode(HeaderCodes.propEnd);
+    }
+
+    writeListStart(itemCount) {
+        this.writeHeaderCode(HeaderCodes.listStart);
+        this.writeHeader(new ListHeader({ itemCount: itemCount }));
+    }
+    writeListEnd() {
+        this.writeHeaderCode(HeaderCodes.listEnd);
+    }
+
+    writeIndefinateStart(type, declaredType) {
+        this.writeHeaderCode(HeaderCodes.indefinateStart);
+        this.writeHeader(new IndefinateHeader({ type: type, declaredType: declaredType }));
+    }
+    writeIndefinateEnd() {
+        this.writeHeaderCode(HeaderCodes.indefinateEnd);
     }
     
     writeString(data) {
@@ -255,11 +312,20 @@ export class MsgPackProtocol {
     writeDouble(data) {
         this.encoderStream.write(data);
     }
+    writeByte(data) {
+        this.encoderStream.write(data);
+    }
     writeEnum(data) {
-        this.encoderStream.write(0); // TMP!!!
+        this.encoderStream.write(data);
     }
     writeObject(data) {
         this.encoderStream.write(data);
+    }
+    writeHeaderCode(code) {
+        this.encoderStream.write(code);
+    }
+    writeHeader(data) {
+        data.write(this);
     }
     
     readString() {
@@ -277,30 +343,45 @@ export class MsgPackProtocol {
     readDouble() {
         return this.read();
     }
+    readByte() {
+        return this.read();
+    }
     readEnum() {
         return this.read();
     }
     readObject() {
         return this.read();
     }
+    readHeaderCode() {
+        return this.read();
+    }
+    readHeader(HeaderType) {
+        let header = new HeaderType();
+        header.read(this);
+
+        return header;
+    }
     
     writeStringValue(data) {
         this.writeString(data);
     }
     writeBooleanValue(data) {
-        this.writeString(data);
+        this.writeBoolean(data);
     }
     writeIntegerValue(data) {
-        this.writeString(data);
+        this.writeInteger(data);
     }
     writeFloatValue(data) {
-        this.writeString(data);
+        this.writeFloat(data);
     }
     writeDoubleValue(data) {
-        this.writeString(data);
+        this.writeDouble(data);
+    }
+    writeByteValue(data) {
+        this.writeByte(data);
     }
     writeEnumValue(data) {
-        this.writeString(data);
+        this.writeEnum(data);
     }
     
     readStringValue() {
@@ -317,6 +398,9 @@ export class MsgPackProtocol {
     }
     readDoubleValue() {
         return this.readDouble();
+    }
+    readByteValue() {
+        return this.readByte();
     }
     readEnumValue() {
         return this.readEnum();
