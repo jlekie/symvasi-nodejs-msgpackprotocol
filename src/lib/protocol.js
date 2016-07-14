@@ -29,16 +29,24 @@ export var HeaderCodes = {
 };
 
 export class MsgPackProtocol {
-    constructor(transport) {
+    constructor(transport, options = {}) {
         this.transport = transport;
+
+        this.decoderChunkSize = options.decoderChunkSize || (1024 * 1024);
     }
     
     read() {
-        let data;
-        Deasync.loopWhile(() => {
-            data = this._data.shift();
-            return data === undefined;
-        });
+        let data = this.decoderStream.read();
+
+        if (data === null) {
+            console.warn('Decoder stream exhausted');
+
+            Deasync.loopWhile(() => {
+                data = this.decoderStream.read();
+                return data === null;
+            });
+        }
+
         return data;
     }
     
@@ -60,30 +68,42 @@ export class MsgPackProtocol {
     beginRead() {
         let data = this.transport.receive();
         
-        this.readStream = new ReadableStreamBuffer();
+        this.readStream = new ReadableStreamBuffer({ chunkSize: this.decoderChunkSize });
+
+        let ready = false;
+        this.readStream.once('readable', () => {
+            ready = true;
+        });
+
         this.readStream.put(data);
         this.readStream.stop();
         
         this.decoderStream = MsgPack.createDecodeStream();
+        this.decoderStream.pause();
         
-        this._data = [];
-        this.readStream.pipe(this.decoderStream).on('data', (data) => {
-            this._data.push(data);
-        });
+        this.readStream.pipe(this.decoderStream);
+
+        Deasync.loopWhile(() => !ready);
     }
     async beginReadAsync() {
         let data = await this.transport.receiveAsync();
         
-        this.readStream = new ReadableStreamBuffer();
+        this.readStream = new ReadableStreamBuffer({ chunkSize: this.decoderChunkSize });
+
+        let ready = false;
+        this.readStream.once('readable', () => {
+            ready = true;
+        });
+
         this.readStream.put(data);
         this.readStream.stop();
         
         this.decoderStream = MsgPack.createDecodeStream();
+        this.decoderStream.pause();
         
-        this._data = [];
-        this.readStream.pipe(this.decoderStream).on('data', (data) => {
-            this._data.push(data);
-        });
+        this.readStream.pipe(this.decoderStream);
+
+        Deasync.loopWhile(() => !ready);
     }
     endRead() {
         this.readStream = null;
