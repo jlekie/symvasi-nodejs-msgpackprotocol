@@ -1,3 +1,5 @@
+import * as Symvasi from 'symvasi-runtime';
+
 export class RequestHeader {
     constructor(props = {}) {
         this.methodName = props.methodName;
@@ -87,11 +89,23 @@ export class IndefinateHeader {
 
     read(protocol) {
         this.type = protocol.readEnumValue();
-        this.declaredType = protocol.readStringValue();
+
+        switch (this.type) {
+            case Symvasi.IndefinateTypes.get('enum'):
+            case Symvasi.IndefinateTypes.get('model'):
+                this.declaredType = protocol.readStringValue();
+                break;
+        }
     }
     write(protocol) {
         protocol.writeEnumValue(this.type);
-        protocol.writeStringValue(this.declaredType);
+
+        switch (this.type) {
+            case Symvasi.IndefinateTypes.get('enum'):
+            case Symvasi.IndefinateTypes.get('model'):
+                protocol.writeStringValue(this.declaredType);
+                break;
+        }
     }
 }
 export class ErrorHeader {
@@ -104,5 +118,9 @@ export class ErrorHeader {
     }
     write(protocol) {
         protocol.writeStringValue(this.message);
+    }
+
+    createError() {
+        return new Error(this.message);
     }
 }
