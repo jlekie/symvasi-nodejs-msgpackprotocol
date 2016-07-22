@@ -1,33 +1,49 @@
+import _ from 'lodash';
 import * as Symvasi from 'symvasi-runtime';
 
 export class RequestHeader {
     constructor(props = {}) {
         this.methodName = props.methodName;
         this.argumentCount = props.argumentCount;
+        this.tags = props.tags;
     }
 
     read(protocol) {
         this.methodName = protocol.readStringValue();
         this.argumentCount = protocol.readIntegerValue();
+        
+        let tagsHeader = protocol.readMapStart();
+        for (let a = 0; a < tagsHeader.itemCount; a++)
+        {
+            let key = protocol.readStringValue();
+            let value = protocol.readStringValue();
+
+            this.tags[key] = value;
+        }
+        protocol.readMapEnd();
     }
     write(protocol) {
         protocol.writeStringValue(this.methodName);
         protocol.writeIntegerValue(this.argumentCount);
+
+        protocol.writeMapStart(_.size(this.tags));
+        for (let key in this.tags) {
+            protocol.writeStringValue(key);
+            protocol.writeStringValue(this.tags[key]);
+        }
+        protocol.writeMapEnd();
     }
 }
 export class ResponseHeader {
     constructor(props = {}) {
         this.isValid = props.isValid;
-        this.test = props.test;
     }
 
     read(protocol) {
         this.isValid = protocol.readBooleanValue();
-        this.test = protocol.readStringValue();
     }
     write(protocol) {
         protocol.writeBooleanValue(this.isValid);
-        protocol.writeStringValue(this.test);
     }
 }
 export class ArgumentHeader {
@@ -70,6 +86,18 @@ export class PropertyHeader {
     }
 }
 export class ListHeader {
+    constructor(props = {}) {
+        this.itemCount = props.itemCount;
+    }
+
+    read(protocol) {
+        this.itemCount = protocol.readIntegerValue();
+    }
+    write(protocol) {
+        protocol.writeIntegerValue(this.itemCount);
+    }
+}
+export class MapHeader {
     constructor(props = {}) {
         this.itemCount = props.itemCount;
     }

@@ -3,7 +3,7 @@ import { ReadableStreamBuffer, WritableStreamBuffer } from 'stream-buffers';
 import Deasync from 'deasync';
 
 // import { ErrorHeader } from 'symvasi-runtime';
-import { RequestHeader, ResponseHeader, ArgumentHeader, ModelHeader, PropertyHeader, ListHeader, IndefinateHeader, ErrorHeader } from './headers';
+import { RequestHeader, ResponseHeader, ArgumentHeader, ModelHeader, PropertyHeader, ListHeader, MapHeader, IndefinateHeader, ErrorHeader } from './headers';
 
 export var HeaderCodes = {
     reqStart: 0,
@@ -25,7 +25,10 @@ export var HeaderCodes = {
     listEnd: 11,
 
     indefinateStart: 12,
-    indefinateEnd: 13
+    indefinateEnd: 13,
+
+    mapStart: 14,
+    mapEnd: 15
 };
 
 export class MsgPackProtocol {
@@ -110,11 +113,11 @@ export class MsgPackProtocol {
         this.decoderStream = null;
     }
     
-    writeRequestStart(methodName, argumentCount) {
+    writeRequestStart(methodName, argumentCount, tags = {}) {
         this.beginWrite();
 
         this.writeHeaderCode(HeaderCodes.reqStart);
-        this.writeHeader(new RequestHeader({ methodName: methodName, argumentCount: argumentCount }));
+        this.writeHeader(new RequestHeader({ methodName: methodName, argumentCount: argumentCount, tags: tags }));
     }
     writeRequestEnd() {
         this.writeHeaderCode(HeaderCodes.reqEnd);
@@ -266,6 +269,21 @@ export class MsgPackProtocol {
         }
     }
 
+    readMapStart() {
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.mapStart) {
+            throw new Error('Invalid message (mapStart)');
+        }
+        
+        return this.readHeader(MapHeader);
+    }
+    readMapEnd() {
+        let headerCode = this.readHeaderCode();
+        if (headerCode !== HeaderCodes.mapEnd) {
+            throw new Error('Invalid message (mapEnd)');
+        }
+    }
+
     readIndefinateStart() {
         let headerCode = this.readHeaderCode();
         if (headerCode !== HeaderCodes.indefinateStart) {
@@ -309,6 +327,14 @@ export class MsgPackProtocol {
         this.writeHeaderCode(HeaderCodes.listEnd);
     }
 
+    writeMapStart(itemCount) {
+        this.writeHeaderCode(HeaderCodes.mapStart);
+        this.writeHeader(new MapHeader({ itemCount: itemCount }));
+    }
+    writeMapEnd() {
+        this.writeHeaderCode(HeaderCodes.mapEnd);
+    }
+
     writeIndefinateStart(type, declaredType) {
         this.writeHeaderCode(HeaderCodes.indefinateStart);
         this.writeHeader(new IndefinateHeader({ type: type, declaredType: declaredType }));
@@ -336,7 +362,7 @@ export class MsgPackProtocol {
         this.encoderStream.write(data);
     }
     writeEnum(data) {
-        this.encoderStream.write(data);
+        this.encoderStream.write(data.literalValue);
     }
     writeObject(data) {
         this.encoderStream.write(data);
@@ -366,8 +392,8 @@ export class MsgPackProtocol {
     readByte() {
         return this.read();
     }
-    readEnum() {
-        return this.read();
+    readEnum(EnumType) {
+        return new EnumType(this.read());
     }
     readObject() {
         return this.read();
@@ -422,7 +448,7 @@ export class MsgPackProtocol {
     readByteValue() {
         return this.readByte();
     }
-    readEnumValue() {
-        return this.readEnum();
+    readEnumValue(EnumType) {
+        return this.readEnum(EnumType);
     }
 }
